@@ -10,19 +10,30 @@ from typing import Dict, Any, List, Union
 
 from src.model import PhishingDetector
 
-DEFAULT_MODEL_PATH = "models/phishing_detector.joblib"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DEFAULT_MODEL_PATH = os.path.join(BASE_DIR, "models", "phishing_detector.joblib")
 _CACHED_DETECTOR = None
 
 
 def get_detector(model_path: str = DEFAULT_MODEL_PATH) -> PhishingDetector:
     """Loads and caches the trained phishing detector."""
     global _CACHED_DETECTOR
+    if not os.path.isabs(model_path):
+        resolved_path = os.path.join(BASE_DIR, model_path)
+        if os.path.exists(resolved_path):
+            model_path = resolved_path
+
     if _CACHED_DETECTOR is None or getattr(_CACHED_DETECTOR, "_loaded_path", None) != model_path:
         if not os.path.exists(model_path):
-            raise FileNotFoundError(
-                f"Trained model not found at '{model_path}'. "
-                f"Please run 'python train.py' first to train the model."
-            )
+            # Check for alternative SGD model
+            sgd_alt = os.path.join(BASE_DIR, "models", "phishing_detector_sgd.joblib")
+            if os.path.exists(sgd_alt):
+                model_path = sgd_alt
+            else:
+                raise FileNotFoundError(
+                    f"Trained model not found at '{model_path}'. "
+                    f"Please run 'python train.py' to generate model artifacts."
+                )
         _CACHED_DETECTOR = PhishingDetector.load(model_path)
         _CACHED_DETECTOR._loaded_path = model_path
     return _CACHED_DETECTOR

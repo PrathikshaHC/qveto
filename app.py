@@ -10,7 +10,13 @@ import json
 from flask import Flask, render_template, request, jsonify
 from predict import analyze_email, get_detector
 
-app = Flask(__name__)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+app = Flask(
+    __name__,
+    template_folder=os.path.join(BASE_DIR, "templates"),
+    static_folder=os.path.join(BASE_DIR, "static") if os.path.exists(os.path.join(BASE_DIR, "static")) else None
+)
 
 # Preload model into memory at startup
 detector = None
@@ -125,13 +131,15 @@ def api_health():
 def api_predict():
     """
     Core prediction endpoint.
-    Accepts JSON:
+    Accepts JSON or Form-encoded data:
       - Option A: {"text": "full email content..."}
       - Option B: {"sender": "...", "subject": "...", "body": "..."}
     """
     data = request.get_json(force=True, silent=True)
+    if not data and request.form:
+        data = request.form.to_dict()
     if not data:
-        return jsonify({"error": "Invalid request body. Expected JSON payload."}), 400
+        return jsonify({"error": "Invalid request body. Expected JSON or form payload."}), 400
 
     raw_text = data.get("text", "")
     subject = data.get("subject", "").strip()
@@ -153,7 +161,10 @@ def api_predict():
         return jsonify({"error": "Email text cannot be empty."}), 400
 
     t_start = time.time()
-    result = analyze_email(raw_text)
+    try:
+        result = analyze_email(raw_text)
+    except Exception as e:
+        return jsonify({"error": f"Inference failed: {str(e)}"}), 500
     latency_ms = round((time.time() - t_start) * 1000, 2)
 
     result["input_length"] = len(raw_text)
@@ -181,7 +192,15 @@ def api_batch():
         else:
             text = str(em)
 
-        res = analyze_email(text)
+        try:
+            res = analyze_email(text)
+        except Exception:
+            res = {
+                "prediction": "Unknown",
+                "phishing_probability": 0.0,
+                "risk_level": "ERROR"
+            }
+
         results.append({
             "index": idx + 1,
             "snippet": text[:80] + ("..." if len(text) > 80 else ""),
@@ -202,7 +221,7 @@ def api_batch():
 @app.route("/api/metrics", methods=["GET"])
 def api_metrics():
     """Returns model benchmark metrics from metrics.json."""
-    metrics_path = "models/metrics.json"
+    metrics_path = os.path.join(BASE_DIR, "models", "metrics.json")
     if os.path.exists(metrics_path):
         with open(metrics_path, "r", encoding="utf-8") as f:
             data = json.load(f)

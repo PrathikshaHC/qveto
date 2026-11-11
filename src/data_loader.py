@@ -32,7 +32,11 @@ def load_phishing_dataset(
         stats: Dictionary containing ingestion statistics.
     """
     if not os.path.exists(csv_path):
-        raise FileNotFoundError(f"Dataset file not found at: {csv_path}")
+        raise FileNotFoundError(
+            f"Dataset file not found at: '{csv_path}'. "
+            f"To retrain models from scratch, place your CSV dataset with 'text'/'text_combined' and 'label' columns at this path, "
+            f"or use the pre-trained production model in 'models/phishing_detector.joblib'."
+        )
 
     raw_count = 0
     empty_count = 0

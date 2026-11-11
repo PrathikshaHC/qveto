@@ -3,7 +3,31 @@ Automated Test Suite for PhishGuard AI Backend API.
 Verifies all REST endpoints and connection response formats.
 """
 
+import sys
 from api_client import PhishGuardClient
+
+
+class DirectFlaskClient:
+    """In-memory test client wrapper using Flask app directly."""
+
+    def __init__(self):
+        from app import app
+        self.client = app.test_client()
+
+    def health(self):
+        return self.client.get("/api/health").get_json()
+
+    def predict(self, text: str, subject: str = "", sender: str = ""):
+        return self.client.post("/api/predict", json={"text": text, "subject": subject, "sender": sender}).get_json()
+
+    def predict_batch(self, emails):
+        return self.client.post("/api/batch", json={"emails": emails}).get_json()
+
+    def metrics(self):
+        return self.client.get("/api/metrics").get_json()
+
+    def samples(self):
+        return self.client.get("/api/samples").get_json()
 
 
 def run_tests():
@@ -11,7 +35,15 @@ def run_tests():
     print("   TESTING BACKEND REST API ENDPOINTS")
     print("=" * 65)
 
-    client = PhishGuardClient("http://127.0.0.1:5000")
+    client = None
+    try:
+        http_client = PhishGuardClient("http://127.0.0.1:5000")
+        http_client.health()
+        client = http_client
+        print("  [Mode] Connected to live server at http://127.0.0.1:5000")
+    except Exception:
+        print("  [Mode] Live HTTP server offline. Testing via internal Flask test client...")
+        client = DirectFlaskClient()
 
     # 1. Health check
     print("\n[1/5] Testing GET /api/health...")

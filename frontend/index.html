@@ -701,16 +701,18 @@ print(data["phishing_probability"])  # 0.9994</pre>
     // =========================================================================
     // DYNAMIC BACKEND API BASE URL CONFIGURATION
     // =========================================================================
-    // When served via Flask on port 5000, relative paths work.
-    // If opened via file:/// or an external port/dev server, defaults to http://127.0.0.1:5000
+    // When served via Flask (http/https), relative paths work for all ports.
+    // When opened directly via file://, defaults to http://127.0.0.1:5000
     function getDefaultApiBaseUrl() {
-      if (window.location.protocol === 'file:' || (window.location.port && window.location.port !== '5000')) {
+      if (window.location.protocol === 'file:') {
         return 'http://127.0.0.1:5000';
       }
       return '';
     }
 
-    let API_BASE_URL = localStorage.getItem('phishguard_api_url') || getDefaultApiBaseUrl();
+    let API_BASE_URL = localStorage.getItem('phishguard_api_url') !== null 
+      ? localStorage.getItem('phishguard_api_url') 
+      : getDefaultApiBaseUrl();
 
     function updateApiUrlDisplay() {
       const displayUrl = API_BASE_URL || window.location.origin;
@@ -779,6 +781,9 @@ print(data["phishing_probability"])  # 0.9994</pre>
         activeBtn.classList.add('bg-indigo-600', 'text-white', 'shadow-sm');
         activeBtn.classList.remove('text-slate-400');
       }
+      if (tabId === 'analytics') {
+        loadMetricsFromApi();
+      }
     }
 
     // Char counter
@@ -795,8 +800,58 @@ print(data["phishing_probability"])  # 0.9994</pre>
       }
     });
 
-    // Presets Library
-    let SAMPLES = [];
+    // Presets Library with Built-in Fallbacks
+    let SAMPLES = [
+      {
+        "id": "paypal_suspension",
+        "title": "PayPal Account Restriction",
+        "type": "Phishing",
+        "sender": "service@security-paypal-alert.com",
+        "subject": "URGENT: Your account access has been limited",
+        "body": "URGENT SECURITY NOTICE: Your PayPal account has been temporarily restricted due to suspicious login attempts from an unrecognized device.\n\nPlease verify your identity immediately by clicking on the secure link below to avoid permanent suspension:\nhttp://secure-paypal-verification-update.com/login?id=83921\n\nFailure to verify within 24 hours will result in permanent account termination and forfeiture of funds."
+      },
+      {
+        "id": "nigerian_scam",
+        "title": "Inheritance Wire Transfer",
+        "type": "Phishing",
+        "sender": "barrister.musa@lawchambers-intl.org",
+        "subject": "Confidential Business Partnership - $25.5M USD",
+        "body": "DEAR BELOVED FRIEND,\n\nI am Barrister Mohammed Musa, personal attorney to the late Dr. George who tragically died with his family. He left behind an unclaimed sum of $25.5 Million USD in a secure escrow vault.\n\nI am seeking your urgent assistance to stand as the foreign beneficiary so these funds can be wired to your bank account. You will receive 40% of the total funds. Please reply with your full legal name, private telephone number, and bank details immediately."
+      },
+      {
+        "id": "it_helpdesk",
+        "title": "Corporate IT Password Reset",
+        "type": "Phishing",
+        "sender": "helpdesk-admin@server-migration-it.net",
+        "subject": "Action Required: Email Quota Exceeded (99% Full)",
+        "body": "ATTENTION ALL EMPLOYEES:\n\nOur IT Helpdesk is performing a critical email server migration this weekend. Your corporate mailbox has exceeded 99% storage quota.\n\nTo prevent immediate suspension of email service and loss of incoming communications, update your domain credentials now:\nhttp://it-support-portal-webmail-update.org/auth\n\nIT Support Desk & System Administration"
+      },
+      {
+        "id": "meeting_sync",
+        "title": "Engineering Team Sync",
+        "type": "Legitimate",
+        "sender": "david.chen@enterprise.tech",
+        "subject": "Rescheduling our bi-weekly architecture sync",
+        "body": "Hi Sarah,\n\nCould we reschedule our bi-weekly architecture sync from Thursday morning to Friday at 2:00 PM? I need to finalize the quarterly performance metrics and review the API latency logs before we meet.\n\nLet me know if that time works for you.\n\nBest regards,\nDavid Chen\nSoftware Engineering Lead"
+      },
+      {
+        "id": "code_review",
+        "title": "Pull Request Review",
+        "type": "Legitimate",
+        "sender": "alex.m@github-enterprise.internal",
+        "subject": "Review for PR #142: Database connection pooling fix",
+        "body": "Thanks for submitting pull request #142!\n\nI reviewed the commit diff for the database connection pooling fix. Overall the logic looks clean, but could you add a unit test covering timeout retries under network partition?\n\nOnce the CI tests pass on Linux and Windows, I will approve and merge.\n\nCheers,\nAlex"
+      },
+      {
+        "id": "invoice_po",
+        "title": "Vendor Purchase Order",
+        "type": "Legitimate",
+        "sender": "billing@cloudservices-global.com",
+        "subject": "Approved Purchase Order #88412 - Cloud Renewal",
+        "body": "Good morning Robert,\n\nAttached is the approved purchase order #88412 for the cloud infrastructure renewal for the upcoming fiscal quarter.\n\nPlease confirm receipt and let us know the estimated provisioning timeline.\n\nThank you for your partnership.\nAccounts Payable Department"
+      }
+    ];
+
     async function loadSamplesFromApi() {
       try {
         const res = await fetch(`${API_BASE_URL}/api/samples`);
@@ -806,6 +861,36 @@ print(data["phishing_probability"])  # 0.9994</pre>
         }
       } catch (e) {
         console.warn('Could not load samples from API, using fallback.', e);
+      }
+    }
+
+    async function loadMetricsFromApi() {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/metrics`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.production_model) {
+            const evalData = data.production_model.evaluation || {};
+            if (evalData.accuracy) {
+              const accEl = document.getElementById('metric-accuracy');
+              if (accEl) accEl.textContent = (evalData.accuracy * 100).toFixed(2) + '%';
+            }
+            if (evalData.precision) {
+              const precEl = document.getElementById('metric-precision');
+              if (precEl) precEl.textContent = (evalData.precision * 100).toFixed(2) + '%';
+            }
+            if (evalData.recall) {
+              const recEl = document.getElementById('metric-recall');
+              if (recEl) recEl.textContent = (evalData.recall * 100).toFixed(2) + '%';
+            }
+            if (evalData.roc_auc) {
+              const aucEl = document.getElementById('metric-auc');
+              if (aucEl) aucEl.textContent = evalData.roc_auc.toFixed(4);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Could not load metrics from API:', e);
       }
     }
 
@@ -1136,9 +1221,11 @@ print(data["phishing_probability"])  # 0.9994</pre>
 
     // Initialize on page load
     window.addEventListener('DOMContentLoaded', () => {
+      renderSampleButtons();
       updateApiUrlDisplay();
       checkBackendHealth();
       loadSamplesFromApi();
+      loadMetricsFromApi();
       setInterval(checkBackendHealth, 15000); // Check API health every 15s
     });
   </script>
